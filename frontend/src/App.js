@@ -3,7 +3,7 @@ import axios from 'axios';
 
 function App() {
   const [backendMessage, setBackendMessage] = useState('Checking backend status...'); //initial message is stored in backendMessage variable and then when set message is called it changes the variable on successfull connection with the server
-
+// new changes 2/12/25
   useEffect(() => {
     // 1. Define the URL for your Flask backend
     // Note: Flask runs on port 5000 by default.
