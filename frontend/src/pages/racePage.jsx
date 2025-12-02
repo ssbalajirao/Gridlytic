@@ -8,6 +8,10 @@ import SessionInfo from "../components/sessionInfo";
 //getting props from app.js to display the backend
 function RacePage ({isBackendReady, backendMessage}) {
 // Styling the Race page 
+// border visiualization for debugging 
+    // const DEBUG_BORDER = {
+    //     border: '1px dashed red'
+    // }; 
     const containerStyle = {
         display: 'flex',
         flexDirection:'column',
@@ -75,7 +79,7 @@ function RacePage ({isBackendReady, backendMessage}) {
                 </div>
             </div>
             {/* BOTTOM SECTION (SessionInfo) */}
-            <SessionInfo />
+            <SessionInfo componentStyle ={{ flexShrink: 0 }} />
         </div>
     );
 }
