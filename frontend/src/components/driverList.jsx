@@ -1,4 +1,5 @@
 import React from 'react';
+import { useRaceDataStore } from '../store/useRaceDataStore';
 
 const DUMMY_DRIVERS = [
   { pos: 1, name: 'Max', tyre: 'H', gap: '+0.000' },
@@ -8,6 +9,8 @@ const DUMMY_DRIVERS = [
 ];
 
 function DriverList() {
+  // calling global state
+  const drivers  = useRaceDataStore((state) => state.drivers);
   const listStyle = {
     backgroundColor: '#000000',
     color: 'white',
