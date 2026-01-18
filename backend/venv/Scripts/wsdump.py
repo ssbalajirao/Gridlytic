@@ -1,4 +1,4 @@
-#!C:\Users\Balaji\OneDrive\Desktop\Balaji\f1-project\backend\venv\Scripts\python.exe
+#!D:\Balaji PC\f1-project\backend\venv\Scripts\python.exe
 
 """
 websocket - WebSocket client library for Python
