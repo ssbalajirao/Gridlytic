@@ -32,3 +32,9 @@ yarn-error.log*
 __pycache__/
 *.pyc
 .DS_Store
+
+# FastF1 data cache
+/backend/fastf1_cache/
+
+# Backend environment variables
+/backend/.env
