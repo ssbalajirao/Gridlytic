@@ -10,13 +10,34 @@ app = Flask(__name__)
 CORS(app) 
 
 # preload the cache data from fast f1
-fastf1.Cache.enable_cache('./fastf1_cache');
+fastf1.Cache.enable_cache('./fastf1_cache')
 
+
+
+# creating a function to get track shape by fetching fastest lap
+
+def get_track_shape():
+    # get the session 
+    session  = fastf1.get_session(2024, 'Monaco', 'R')
+    session.load(telemetry=True)
+
+    # getting the fastest lap and its telemetry
+    fastest_lap = session.laps.pick_fastest()
+    telemetry = fastest_lap.get_telemetry()
+
+    # getting track points
+    track_points =[]
+    for _, row in telemetry.itterows():
+        track_points.append({
+            "x": float(row['X']),
+            "y": float(row['Y'])
+        })
+    return track_points
 
 # creating a function to get race data
 def get_f1_data():
     session = fastf1.get_session(2024, 'Monaco', 'R')
-    session.load(telemetry=False, weather=False)
+    session.load(telemetry=True, weather=False)
 
     result  = session.results
     driversList = []
