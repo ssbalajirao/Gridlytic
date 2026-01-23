@@ -6,6 +6,31 @@ function TrackView() {
   const {flagStatus, currentLap, totalLaps } = useRaceDataStore(state => state.session);
   const trackSvgPath = useRaceDataStore(state => state.track.svgPath);
   const drivers = useRaceDataStore(state => state.drivers);
+  const trackMap = useRaceDataStore(state => state.trackMap);
+
+  // math to generate track map
+  if (trackMap || trackMap.length === 0 ) {
+    return <div style = {{color: 'white', padding:'20px'}}>Loading Track Map...</div>
+  }
+
+  // finding the min max values
+  const xValues = trackMap.map(p=> p.x);
+  const yValues = trackMap.map(p=> p.y);
+
+  const minX = Math.min(...xValues);
+  const maxX = Math.max(...xValues);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
+
+  const padding = 500;
+  const width = (maxX - minX) + (padding * 2);
+  const height = (maxY - minY) + (padding *2);   
+  const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
+
+  // creating Path to show on front end
+  const pathData = trackMap.map((point, index) =>{
+    return `${index === 0 ? 'M':'L'} ${point.x} ${point.y}`;
+  }).join(' ');
 
   const flagColorMap = {
     'RED':'red',

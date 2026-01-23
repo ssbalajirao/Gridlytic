@@ -8,6 +8,8 @@ function App() {
   const [backendReady, setBackendReady] = useState(false);
   const setDrivers = useRaceDataStore((state) => state.setDrivers);
   const setSessionStatus = useRaceDataStore((state) => state.setSessionStatus);
+  const setTrackMap = useRaceDataStore((state) => state.setTrackMap);
+
   // new changes 2/12/25
   useEffect(() => {
     // 1. Define the URL for your Flask backend
@@ -22,6 +24,9 @@ function App() {
           // updating the store with  the f1 race data received from the backend
           setDrivers(response.data.drivers);
           setSessionStatus(response.data.session);
+          if (response.data.track_map) {
+            setTrackMap(response.data.track_map)
+          }
           setBackendMessage(`Monitoring: ${response.data.session.trackName}`);
           setBackendReady(true);
         }
@@ -34,11 +39,11 @@ function App() {
     };
     // initiallsing  and 5 second pulse 
     fetcchRaceData(); // Initial fetch when component mounts
-    const intervalId = setInterval(fetcchRaceData, 5000); // Fetch every 5 seconds
+    const intervalId = setInterval(fetcchRaceData, 15000); // Fetch every 5 seconds
 
     return () => clearInterval(intervalId); // Cleanup on unmount this prevents memory leak
 
-  }, [setDrivers, setSessionStatus]); // Empty dependency array ensures this runs only once
+  }, [setDrivers, setSessionStatus, setTrackMap]); // Empty dependency array ensures this runs only once
 
   // we are passing the backend status as props to display the back end status on the race page it self
   return (

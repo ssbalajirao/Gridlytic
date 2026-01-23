@@ -12,10 +12,9 @@ const initialState = {
     },
 
     // Driver Data Array
-    drivers: [
-        { id: 'VER', position: 1, driverName: 'Max', gapToLeader: '+0.000', interval: '+0.000', teamColor: '#0600EF', tireCompound: 'HARD', lapPercentage: 0.85 },
-        { id: 'HAM', position: 2, driverName: 'Lewis', gapToLeader: '+3.500', interval: '+3.500', teamColor: '#00D2BE', tireCompound: 'MEDIUM', lapPercentage: 0.70 }
-    ],
+    drivers: [],
+
+    track_map:[],
 
     // Track Layout Data
     track: {
@@ -45,6 +44,8 @@ export const useRaceDataStore = create((set) => ({
     setSessionStatus: (newStatus) => set((state) => ({ 
         session: { ...state.session, ...newStatus } 
     })),
+
+    setTrackMap: (newMapData) => set({trackMap: newMapData}),
 
     // Action to reset the store back to its initial state
     resetState: () => set(initialState),
