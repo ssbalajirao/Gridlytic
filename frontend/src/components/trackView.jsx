@@ -9,28 +9,28 @@ function TrackView() {
   const trackMap = useRaceDataStore(state => state.trackMap);
 
   // math to generate track map
-  if (trackMap || trackMap.length === 0 ) {
-    return <div style = {{color: 'white', padding:'20px'}}>Loading Track Map...</div>
+  if (!trackMap || trackMap.svgPath === 0 ) {
+    return <div style = {{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#666' }}>Loading Track Map...</div>
   }
 
-  // finding the min max values
-  const xValues = trackMap.map(p=> p.x);
-  const yValues = trackMap.map(p=> p.y);
+  // // finding the min max values
+  // const xValues = trackMap.map(p=> p.x);
+  // const yValues = trackMap.map(p=> p.y);
 
-  const minX = Math.min(...xValues);
-  const maxX = Math.max(...xValues);
-  const minY = Math.min(...yValues);
-  const maxY = Math.max(...yValues);
+  // const minX = Math.min(...xValues);
+  // const maxX = Math.max(...xValues);
+  // const minY = Math.min(...yValues);
+  // const maxY = Math.max(...yValues);
 
-  const padding = 500;
-  const width = (maxX - minX) + (padding * 2);
-  const height = (maxY - minY) + (padding *2);   
-  const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
+  // const padding = 500;
+  // const width = (maxX - minX) + (padding * 2);
+  // const height = (maxY - minY) + (padding *2);   
+  // const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
 
-  // creating Path to show on front end
-  const pathData = trackMap.map((point, index) =>{
-    return `${index === 0 ? 'M':'L'} ${point.x} ${point.y}`;
-  }).join(' ');
+  // // creating Path to show on front end
+  // const pathData = trackMap.map((point, index) =>{
+  //   return `${index === 0 ? 'M':'L'} ${point.x} ${point.y}`;
+  // }).join(' ');
 
   const flagColorMap = {
     'RED':'red',
@@ -54,16 +54,17 @@ function TrackView() {
   const indicatorText = statusTextMap[flagStatus] || `Status: ${flagStatus}`;
   const trackStyle = {
     width: '100%',
-    height: '100%',
+    height: '100vh',
     backgroundColor: '#000000',
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'row',
     padding:'20px 30px',
     color: 'white',
     fontFamily:'sans-serif',
+    overflow: 'hidden'
   };
   return (
-    <div style={{trackStyle}}>
+    <div style={trackStyle}>
       {/* mainTitle */}
       <h1 style={{
         fontSize:'1.8em',
@@ -96,23 +97,33 @@ function TrackView() {
 
       {/* 3. TRACK OUTLINE PLACEHOLDER (Grows to fill container) */}
       <div style={{
-        flexGrow: 1,
-        // border: '2px dashed white',
+        flex: 1,              // Take up all remaining space
         display: 'flex',
-        justifyContent:'center',
-        alignItems:'center',
-        marginTop:'10px 0',
-        fontSize:'1.5em',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100%',
+        padding: '20px'
       }}>
         {/* track map */}
         <svg
-          width="80%"
-          height="80%"
-          style={{border:`2px solid ${currentFlagStatus}`, color: currentFlagStatus}}  
+          viewBox={trackMap.viewBox} // THIS IS THE MAGIC LINE
+          style={{ width: 'auto', height: '95%' }}
+          preserveAspectRatio="xMidYMid meet"
         >
-          <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill={currentFlagStatus}>
+          {/* Path test */}
+        <path
+            d={trackMap.svgPath}
+            fill="none"
+            stroke={currentFlagStatus}
+            strokeWidth="15"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            style={{ transition: 'stroke 0.5s ease'}}
+          />
+          {/* <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill={currentFlagStatus}>
             track Outline over here
-          </text>
+          </text> */}
 
         </svg>
       </div>

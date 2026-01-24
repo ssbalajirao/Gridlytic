@@ -19,23 +19,29 @@ function DriverList() {
   const listStyle = {
     backgroundColor: '#000000',
     color: 'white',
-    padding: '20px 30px',
+    padding: '5px 15px',
     height: '100%',
-    overflowY: 'auto',
-    fontFamily:'sans-serif'
+    overflow: 'hidden',
+    fontFamily:'sans-serif',
+    boxSizing: 'border-box',
   };
   const tableStyle = {
     width: '100%',
     borderCollapse: 'collapse', // Ensures borders look sharp
-    fontSize: '0.95em',
+    fontSize: '0.75em',
     textAlign: 'left',
+    lineHeight: '1.1'
   };
 
   const thStyle = {
     borderBottom: '2px solid #555',
-    padding: '10px 5px',
+    padding: '4px 2px',
     fontWeight: 'normal',
     color: '#aaa',
+    position: 'sticky',
+    top: 0,
+    backgroundColor: '#000',
+    zIndex: 1
   };
   const tdStyle = {
     padding: '10px 5px',

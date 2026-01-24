@@ -14,7 +14,7 @@ const initialState = {
     // Driver Data Array
     drivers: [],
 
-    track_map:[],
+    trackMap:[],
 
     // Track Layout Data
     track: {

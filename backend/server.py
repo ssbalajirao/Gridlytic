@@ -22,41 +22,70 @@ def get_track_shape_once():
     if cached_track_map is None:
         print("[PHASE 3] Loading Monaco Geometry for the first time...")
 
-        session = fastf1.get_session(2024, 'Monaco', 'R')
+        session = fastf1.get_session(2025, 'Silverstone', 'R')
         session.load(telemetry=True, weather=False)
 
-        # getting the fastest lap and its telemetry
+        # getting the fastest lap and its telemetry to get the outline of the map
         fastest_lap = session.laps.pick_fastest()
-        telemetry = fastest_lap.get_telemetry()
+        telemetry = fastest_lap.get_telemetry().iloc[::2]
 
+        # finding bound to determine track outlines
+        x_min, x_max = telemetry['X'].min(), telemetry['X'].max()
+        y_min, y_max = telemetry['Y'].min(), telemetry['Y'].max()
         # getting track points
-        track_points = []
-        for _, row in telemetry.iloc[::20].iterrows():  
-            track_points.append({
-                "x": float(row['X']),
-                "y": float(row['Y'])
-            })
-        cached_track_map = track_points
-        print("[PHASE 3] Map loaded successfully!")
+
+
+        # Calculation of point to make grid
+
+        path_parts = []
+
+        for i, row in enumerate(telemetry.itertuples()):
+            norm_x = ((row.X - x_min) / (x_max - x_min)) * 1000
+            norm_y = ((row.Y - y_min)/(y_max - y_min)) * 1000
+
+            # Path building
+            command = "M" if i == 0 else "L"
+            path_parts.append(f"{command} {norm_x:.1f} {norm_y:.1f}")
+
+        path_parts.append("Z")
+        padding = 50
+        cached_track_map = {
+            "svgPath":" ".join(path_parts),
+            "viewBox":f"{-padding} {-padding} {1000 + (padding * 2)} {1000 + (padding * 2)}",
+            "bounds": {
+                "x_min": float(x_min), "x_max": float(x_max),
+                "y_min": float(y_min), "y_max": float(y_max)
+            }
+        }
+        print("Geometry engine is ready")
+
     
     return cached_track_map  # Fixed: return the map instead of calling function again
 
 # creating a function to get race data
 def get_f1_data():
-    session = fastf1.get_session(2024, 'Monaco', 'R')
+    session = fastf1.get_session(2025, 'Silverstone', 'R')
     session.load(telemetry=True, weather=False)
 
     result = session.results
     driversList = []
 
     for index, row in result.iterrows():
+        gap_str = str(row['Time'])
+
+            # 2. APPLY THE CLEANING LOGIC HERE
+        if gap_str == 'NaT' or 'days' not in gap_str:
+            clean_gap = "LAP"
+        else:
+                # Trims "0 days 00:00:15.554000" to "00:00:15"
+            clean_gap = gap_str.split('days')[-1].split('.')[0].strip()
         driverData = {
             "id": str(row['DriverNumber']),  # Convert to string for safety
             "position": int(row['Position']) if not pd.isna(row['Position']) else 0,
             "driverName": row['FullName'],
             "teamcolor": f"#{row['TeamColor']}" if not pd.isna(row['TeamColor']) else "#FFFFFF",
             "tireCompound": "SOFT",
-            "gapToLeader": str(row['Time']).split('days')[-1].strip() if str(row['Time']) != 'NaT' else "LAP",
+            "gapToLeader": clean_gap,
             "lapPercentage": 0.0
         }
         driversList.append(driverData)

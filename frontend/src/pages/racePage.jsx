@@ -19,20 +19,31 @@ function RacePage ({isBackendReady, backendMessage}) {
         margin: 0, 
         backgroundColor: '#000000',
         fontFamily: "'Inter', sans-serif",
+        overflow: 'hidden'
     };
 
     const topSectionStyle = {
         display: 'flex',
-        flexGrow: 1,
+        flexDirection: 'row', 
+        flex: 1, 
+        minHeight: 0, 
     };
 
     const trackViewStyle = {
         flex: 4,
-        borderRight: '1px solid #111'
+        borderRight: '1px solid #111',
+        display: 'flex', // Allow TrackView to center its content
+        flexDirection: 'column',
+        height: '100%', // Match parent height
+        minWidth: 0, // Prevents SVG from pushing container width
     };
 
     const driverListStyle = {
         flex: 1,
+        height: '100%', // Match parent height
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden', // Let the DriverList component handle its own scroll
     };
 
     return (
