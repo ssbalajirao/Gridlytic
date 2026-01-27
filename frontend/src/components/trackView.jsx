@@ -121,6 +121,31 @@ function TrackView() {
             strokeLinecap="round"
             style={{ transition: 'stroke 0.5s ease'}}
           />
+          {/* Driver dots */}
+          {drivers.map((driver) =>(
+            <g key = {driver.id}>
+              <circle
+                cx = {driver.x}
+                cy = {driver.y}
+                r = "12"
+                fill = {driver.teamcolor}
+                stroke = "width"
+                strokeWidth="2"
+                style = {{transition: 'all 0.5s linear'}}/>
+                
+                <text
+                  x={driver.x}
+                  y={driver.y - 18} // Position name slightly above the dot
+                  fill="white"
+                  fontSize="14"
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  style={{ transition: 'all 0.5s linear', pointerEvents: 'none' }}
+                >
+                  {driver.driverName}
+                </text>
+              </g>
+          ))}
           {/* <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill={currentFlagStatus}>
             track Outline over here
           </text> */}
