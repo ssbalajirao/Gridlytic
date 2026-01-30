@@ -201,7 +201,7 @@ def get_f1_data():
     return driversList
 
 
-@app.route('/app/race/Live', methods=['GET'])
+@app.route('/api/race/live', methods=['GET'])
 def get_live_positions():
     try:
         elapsed_time = float(request.args.get('elapsed', 0))

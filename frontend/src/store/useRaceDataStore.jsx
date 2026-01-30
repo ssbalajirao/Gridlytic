@@ -4,9 +4,9 @@ const initialState = {
     // session metaData
     session:{
         currentLap: 1,
-        totalLaps: 70,
-        flagSTatus: 'GREEN',
-        trackName: 'Monza',
+        totalLaps: 52,
+        flagStatus: 'GREEN',
+        trackName: 'Silverstone',
         sessionName: 'Race',
         pointProjection: {"1st": "Max +25", "2nd": "Sainz +18", "3rd": "Oscar +15"},
     },

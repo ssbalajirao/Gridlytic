@@ -1,13 +1,111 @@
-import React from 'react';
+import React, {useEffect, useState, useRef}from 'react';
 import { useRaceDataStore } from '../store/useRaceDataStore';
 
 function TrackView() {
 
   const {flagStatus, currentLap, totalLaps } = useRaceDataStore(state => state.session);
-  const trackSvgPath = useRaceDataStore(state => state.track.svgPath);
+  // const trackSvgPath = useRaceDataStore(state => state.track.svgPath);
   const drivers = useRaceDataStore(state => state.drivers);
   const trackMap = useRaceDataStore(state => state.trackMap);
 
+  const setDrivers = useRaceDataStore(state => state.setDrivers); //to update driver positions
+  const setSessionStatus = useRaceDataStore(state => state.setSessionStatus); //to update lapcount
+
+  // animation variables
+
+  const [isPlaying, setIsPlaying] = useState(false); //play pause
+  const [elapsedTime, setElapsedTime] = useState(0); //current race time
+  const [playbackSpeed, setPlaybackSpeed] = useState(5); //speed multiplier
+
+// function to fetch live race from backend
+    const animationRef = useRef(null);  
+    const startTimeRef = useRef(null); 
+  const fetchLivePositions = async(time) =>{
+
+    try{
+      const response = await fetch(`http://127.0.0.1:5000/api/race/live?elapsed=${time}`);
+      const data = await response.json();
+
+      if (data.status === 'success' && data.drivers) {
+        setDrivers(data.drivers); //setting driver positions
+        setSessionStatus({ currentLap: data.currentLap });
+      }
+    }catch(error){
+      console.error('Error fetching live positions:', error);
+    }
+  }
+
+
+// actually animating through animation frame
+
+  useEffect(() =>{
+    // it calculates elapsed time continously 
+    if(isPlaying){
+      const animate  = (timestamp) => {
+        if (!startTimeRef.current) {
+          startTimeRef.current = timestamp;
+
+        }
+
+        const elapsed  = (timestamp - startTimeRef.current) / 1000;
+
+        const raceTime =  elapsed * playbackSpeed;
+
+        setElapsedTime(raceTime);
+        fetchLivePositions(raceTime);
+        if(raceTime < 4680){
+          animationRef.current = requestAnimationFrame(animate);
+        }else{
+          setIsPlaying(false);
+          console.log("Race has finished");
+        }
+      };
+      animationRef.current = requestAnimationFrame(animate);
+
+    }
+    return () =>{
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+
+      }
+    };
+  }, [isPlaying, playbackSpeed]);
+
+  const togglePlay = () => {
+    if (!isPlaying) {
+      startTimeRef.current = null;
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+// function to reset animation to start 
+
+  const resetAnimation = () =>{
+    setIsPlaying(false);
+    setElapsedTime(0);
+    startTimeRef.current = null;
+    fetchLivePositions(0);
+
+  };
+
+  // function to change Speed of playback
+
+  const changeSpeed = (newSpeed) =>{
+
+    const wasPlaying  = isPlaying;
+    if (wasPlaying) {
+      setIsPlaying(false);
+
+    }
+    setPlaybackSpeed(newSpeed);
+    if (wasPlaying) {
+      setTimeout(() =>{
+        startTimeRef.current = null;
+        setIsPlaying(true);
+
+      },50)
+    }
+  };
   // math to generate track map
   if (!trackMap || trackMap.svgPath === 0 ) {
     return <div style = {{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#666' }}>Loading Track Map...</div>
@@ -54,104 +152,223 @@ function TrackView() {
   const indicatorText = statusTextMap[flagStatus] || `Status: ${flagStatus}`;
   const trackStyle = {
     width: '100%',
-    height: '100vh',
+    height: '100%', //may need to change it later to 100vh
     backgroundColor: '#000000',
     display: 'flex',
-    flexDirection: 'row',
+    flexDirection: 'column', //change to row if it doesnt work and loosk bad
     padding:'20px 30px',
     color: 'white',
     fontFamily:'sans-serif',
     overflow: 'hidden'
   };
+
+  const formatTime = (seconds) =>{
+    const mins = Math.floor(seconds/60);
+    const secs = Math.floor(seconds %60);
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+
+  }
   return (
     <div style={trackStyle}>
-      {/* mainTitle */}
-      <h1 style={{
-        fontSize:'1.8em',
-        margin:'0 0 10px 0',
-        fontFamily: "'Rajdhani', sans-serif",
-      }}>
-        Gridlytic
-      </h1>
-      {/* lap count and race status indicator */}
-      <div style={{padding: '5px 0 20px 0', fontSize: '0.9em', display: 'flex', alignItems: 'center'}}>
-        {/* Race status indicator */}
-        {isWarningActive && (
-          <span style={{ 
-              backgroundColor: '#FFD700', // Yellow color for caution
+      {/* ========== NEW: Wrapped header in container with flexShrink ========== */}
+      <div style={{ flexShrink: 0 }}> {/* ← NEW: Prevents header from shrinking */}
+        
+        {/* ========== ORIGINAL: Main Title (no changes) ========== */}
+        <h1 style={{
+          fontSize: '1.8em',
+          margin: '0 0 10px 0',
+          fontFamily: "'Rajdhani', sans-serif",
+        }}>
+          Gridlytic
+        </h1>
+        {/* ======================================================= */}
+        
+        {/* ========== CHANGE: Modified status bar with new elements ========== */}
+        <div style={{ 
+          padding: '5px 0 15px 0',  // ← CHANGE: Reduced bottom padding from 20px to 15px
+          fontSize: '0.9em', 
+          display: 'flex', 
+          alignItems: 'center',
+          gap: '15px',  // ← NEW: Added gap between elements
+          flexWrap: 'wrap'  // ← NEW: Allow wrapping on small screens
+        }}>
+          {/* Race status indicator (unchanged) */}
+          {isWarningActive && (
+            <span style={{ 
+              backgroundColor: '#FFD700',
               color: '#000', 
-              padding: '2px 5px', 
+              padding: '4px 8px',  // ← CHANGE: Increased padding slightly
               borderRadius: '3px', 
-              fontWeight: 'bold', 
-              marginRight: '15px' 
-          }}>
-            {indicatorText} {/* dynamic warning texts*/ }
+              fontWeight: 'bold'
+            }}>
+              {indicatorText}
+            </span>
+          )}
+
+          {/* Lap count (unchanged) */}
+          <span style={{ fontSize: '1.2em', fontWeight: 'bold' }}>
+            Lap: {currentLap}/{totalLaps}
           </span>
-        )}
 
-        {/* Lap count */}
-        <span style={{fontSize:'1.2em',fontWeight:'bold' }}>
-          Lap: {currentLap}/{totalLaps} 
-        </span>
+          {/* ========== NEW: Race time display ========== */}
+          <span style={{ fontSize: '1em', color: '#888' }}>
+            Race Time: {formatTime(elapsedTime)}
+          </span>
+          {/* ============================================ */}
+        </div>
+        {/* =================================================================== */}
+
+        {/* ========== NEW: Playback Controls Section ========== */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '10px', 
+          marginBottom: '15px',
+          alignItems: 'center'
+        }}>
+          {/* ========== NEW: Play/Pause Button ========== */}
+          <button 
+            onClick={togglePlay}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: isPlaying ? '#ff4444' : '#44ff44', // Red when playing, green when paused
+              border: 'none',
+              borderRadius: '4px',
+              color: '#000',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '13px',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => e.target.style.opacity = '0.8'}
+            onMouseOut={(e) => e.target.style.opacity = '1'}
+          >
+            {isPlaying ? '⏸ Pause' : '▶ Play'}
+          </button>
+          {/* =========================================== */}
+          
+          {/* ========== NEW: Reset Button ========== */}
+          <button 
+            onClick={resetAnimation}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#4444ff',
+              border: 'none',
+              borderRadius: '4px',
+              color: '#fff',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '13px',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => e.target.style.opacity = '0.8'}
+            onMouseOut={(e) => e.target.style.opacity = '1'}
+          >
+            ⏮ Reset
+          </button>
+          {/* ======================================= */}
+
+          {/* ========== NEW: Speed Control Buttons ========== */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px',
+            marginLeft: '10px'
+          }}>
+            <span style={{ fontSize: '12px', color: '#aaa' }}>Speed:</span>
+            {[1, 2, 5, 10, 20].map(speed => (
+              <button
+                key={speed}
+                onClick={() => changeSpeed(speed)}
+                style={{
+                  padding: '6px 10px',
+                  backgroundColor: playbackSpeed === speed ? '#666' : '#222', // Highlight current speed
+                  border: playbackSpeed === speed ? '1px solid #888' : '1px solid #444',
+                  borderRadius: '3px',
+                  color: playbackSpeed === speed ? '#fff' : '#aaa',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {speed}x
+              </button>
+            ))}
+          </div>
+          {/* =============================================== */}
+        </div>
+        {/* =================================================== */}
       </div>
+      {/* ===================================================================== */}
 
-      {/* 3. TRACK OUTLINE PLACEHOLDER (Grows to fill container) */}
+      {/* ========== CHANGE: Modified track container for better layout ========== */}
       <div style={{
-        flex: 1,              // Take up all remaining space
+        flex: 1,  // ← ORIGINAL: Take remaining space
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        height: '100%',
-        padding: '20px'
+        minHeight: 0,  // ← NEW: Prevent flex item from exceeding container
+        padding: '10px 0'  // ← CHANGE: Reduced from 20px to 10px
       }}>
-        {/* track map */}
+        {/* ========== CHANGE: Modified SVG styling ========== */}
         <svg
-          viewBox={trackMap.viewBox} // THIS IS THE MAGIC LINE
-          style={{ width: 'auto', height: '95%' }}
+          viewBox={trackMap.viewBox}
+          style={{ 
+            width: '100%',  // ← CHANGE: Changed from 'auto' to '100%'
+            height: '100%',  // ← CHANGE: Changed from '95%' to '100%'
+            maxHeight: '100%'  // ← NEW: Prevent overflow
+          }}
           preserveAspectRatio="xMidYMid meet"
         >
-          {/* Path test */}
-        <path
+          {/* ========== ORIGINAL: Track outline path (no changes) ========== */}
+          <path
             d={trackMap.svgPath}
             fill="none"
             stroke={currentFlagStatus}
             strokeWidth="15"
             strokeLinejoin="round"
             strokeLinecap="round"
-            style={{ transition: 'stroke 0.5s ease'}}
+            style={{ transition: 'stroke 0.5s ease' }}
           />
-          {/* Driver dots */}
-          {drivers.map((driver) =>(
-            <g key = {driver.id}>
+          {/* =============================================================== */}
+          
+          {/* ========== CHANGE: Modified driver dots with animation support ========== */}
+          {drivers.map((driver) => (
+            <g key={driver.id}>
               <circle
-                cx = {driver.x}
-                cy = {driver.y}
-                r = "12"
-                fill = {driver.teamcolor}
-                stroke = "width"
+                cx={driver.x}  // ← These update via Zustand when fetchLivePositions runs
+                cy={driver.y}
+                r="12"
+                fill={driver.teamcolor}
+                stroke="white"
                 strokeWidth="2"
-                style = {{transition: 'all 0.5s linear'}}/>
-                
-                <text
-                  x={driver.x}
-                  y={driver.y - 18} // Position name slightly above the dot
-                  fill="white"
-                  fontSize="14"
-                  fontWeight="bold"
-                  textAnchor="middle"
-                  style={{ transition: 'all 0.5s linear', pointerEvents: 'none' }}
-                >
-                  {driver.driverName}
-                </text>
-              </g>
+                style={{ 
+                  transition: 'cx 0.3s linear, cy 0.3s linear',  // ← NEW: Smooth position transitions
+                  cursor: 'pointer'  // ← NEW: Show it's interactive
+                }}
+              />
+              
+              <text
+                x={driver.x}
+                y={driver.y - 18}
+                fill="white"
+                fontSize="13"  // ← CHANGE: Reduced from 14 to 13
+                fontWeight="bold"
+                textAnchor="middle"
+                style={{ 
+                  transition: 'x 0.3s linear, y 0.3s linear',  // ← NEW: Smooth text transitions
+                  pointerEvents: 'none',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'  // ← NEW: Added shadow for readability
+                }}
+              >
+                {driver.driverName}
+              </text>
+            </g>
           ))}
-          {/* <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" fill={currentFlagStatus}>
-            track Outline over here
-          </text> */}
-
+          {/* ========================================================================= */}
         </svg>
       </div>
+      {/* ======================================================================= */}
     </div>
   );
 }
