@@ -1,5 +1,22 @@
-body {
+/* GLOBAL RESET AND CORE LAYOUT FIXES */
+html, body, #root {
+  /* Fix 1: Removes default browser margins/padding that cause clipping/scrolling */
   margin: 0;
+  padding: 0;
+  
+  /* Fix 2: Ensures the box sizing is predictable */
+  box-sizing: border-box;
+
+  /* Fix 3: Ensures the root elements fill 100% of the viewport */
+  height: 100%;
+  width: 100%;
+  
+  /* Optional: Prevents unwanted scrolling due to 100vh + margins */
+  overflow: hidden; 
+}
+
+/* Original body styles */
+body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
