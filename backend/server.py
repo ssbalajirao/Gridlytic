@@ -152,7 +152,7 @@ def get_f1_data():
     # result = session.results
 
     target_lap = 1
-    race_laps = session.laps.pick_laps(target_lap)
+    race_laps = session.laps[session.laps['LapNumber'] == target_lap]
     driversList = []
     for index, row in race_laps.iterrows():
         # 1. Standardize the driver number variable name
@@ -162,15 +162,18 @@ def get_f1_data():
         team_color = "#FFFFFF"
         full_name = row.get('Driver', 'Unknown')
         try:
-            driver_lap = session.laps.pick_drivers(driver_number).pick_laps(target_lap)
+            driver_laps = session.laps.pick_drivers(driver_number)
+            driver_lap = driver_laps[driver_laps['LapNumber'] == target_lap]
             
             if len(driver_lap) > 0:
                 # ← CHANGE: Get starting position instead of ending position
-                raw_telemetry = driver_lap.get_telemetry().iloc[0]  # First point instead of last
-                
-                # Scale coordinates
-                dot_x = ((raw_telemetry['X'] - bounds['x_min']) / (bounds['x_max'] - bounds['x_min'])) * 1000
-                dot_y = 1000 - (((raw_telemetry['Y'] - bounds['y_min']) / (bounds['y_max'] - bounds['y_min'])) * 1000)
+                raw_telemetry = driver_lap.iloc[0].get_telemetry()  # First point instead of last
+                if len(raw_telemetry) > 0:
+                    # getting first point of starting session
+                    first_point = raw_telemetry.iloc[0]
+                    # Scale coordinates
+                    dot_x = ((first_point['X'] - bounds['x_min']) / (bounds['x_max'] - bounds['x_min'])) * 1000
+                    dot_y = 1000 - (((first_point['Y'] - bounds['y_min']) / (bounds['y_max'] - bounds['y_min'])) * 1000)
             
 
             team_color = driver_metadata.get(driver_number, {}).get("color", "#FFFFFF")

@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useRef}from 'react';
+import React, {useEffect, useState, useRef, useCallback}from 'react';
 import { useRaceDataStore } from '../store/useRaceDataStore';
 
 function TrackView() {
@@ -20,7 +20,7 @@ function TrackView() {
 // function to fetch live race from backend
     const animationRef = useRef(null);  
     const startTimeRef = useRef(null); 
-  const fetchLivePositions = async(time) =>{
+  const fetchLivePositions = useCallback(async(time) =>{
 
     try{
       const response = await fetch(`http://127.0.0.1:5000/api/race/live?elapsed=${time}`);
@@ -33,7 +33,7 @@ function TrackView() {
     }catch(error){
       console.error('Error fetching live positions:', error);
     }
-  }
+  },[setDrivers, setSessionStatus]);
 
 
 // actually animating through animation frame
@@ -69,7 +69,7 @@ function TrackView() {
 
       }
     };
-  }, [isPlaying, playbackSpeed]);
+  }, [isPlaying, playbackSpeed, fetchLivePositions]);
 
   const togglePlay = () => {
     if (!isPlaying) {
