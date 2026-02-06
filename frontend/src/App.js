@@ -39,9 +39,9 @@ function App() {
     };
     // initiallsing  and 5 second pulse 
     fetcchRaceData(); // Initial fetch when component mounts
-    const intervalId = setInterval(fetcchRaceData, 15000); // Fetch every 5 seconds
+    // const intervalId = setInterval(fetcchRaceData, 15000); // Fetch every 5 seconds
 
-    return () => clearInterval(intervalId); // Cleanup on unmount this prevents memory leak
+    // return () => clearInterval(intervalId); // Cleanup on unmount this prevents memory leak
 
   }, [setDrivers, setSessionStatus, setTrackMap]); // Empty dependency array ensures this runs only once
 

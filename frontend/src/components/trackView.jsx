@@ -4,131 +4,156 @@ import { useRaceDataStore } from '../store/useRaceDataStore';
 function TrackView() {
 
   const {flagStatus, currentLap, totalLaps } = useRaceDataStore(state => state.session);
-  // const trackSvgPath = useRaceDataStore(state => state.track.svgPath);
   const drivers = useRaceDataStore(state => state.drivers);
   const trackMap = useRaceDataStore(state => state.trackMap);
 
-  const setDrivers = useRaceDataStore(state => state.setDrivers); //to update driver positions
-  const setSessionStatus = useRaceDataStore(state => state.setSessionStatus); //to update lapcount
+  const setDrivers = useRaceDataStore(state => state.setDrivers);
+  const setSessionStatus = useRaceDataStore(state => state.setSessionStatus);
 
   // animation variables
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(5);
 
-  const [isPlaying, setIsPlaying] = useState(false); //play pause
-  const [elapsedTime, setElapsedTime] = useState(0); //current race time
-  const [playbackSpeed, setPlaybackSpeed] = useState(5); //speed multiplier
+  const animationRef = useRef(null);  
+  const startTimeRef = useRef(null); 
 
-// function to fetch live race from backend
-    const animationRef = useRef(null);  
-    const startTimeRef = useRef(null); 
-  const fetchLivePositions = useCallback(async(time) =>{
+  // adding throttling in order to tackle memory leak
+  // old method was sending 60 https request per second which caused memory leak  now we are make it 10 per second and also handling mempry leak 
 
+  const lastFetchTimeREf = useRef(0); //this tracks when the last request was made
+  const fetchInterval = 100;  //using this to fetch every 100ms
+  const abortControllerRef = useRef(null); //used to cancel previous requests
+
+  // ✅ ADD: Console log to see current drivers
+  console.log("🎯 Current drivers in state:", drivers.length, drivers.map(d => ({id: d.id, x: d.x, y: d.y})));
+
+  const fetchLivePositions = useCallback(async(time) => {
+    const now  = Date.now();
+
+    // throttling logic
+    if (now - lastFetchTimeREf.current <fetchInterval) {
+      return; //skips this current request if atleast 100ms has passed since last fetch
+    }
+
+    lastFetchTimeREf.current = now; //updates last fetch time 
+    // request cancellation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort(); // cancels previous request if it is still pending 
+    }
+
+    // creating new abort controller for this request 
+    abortControllerRef.current = new AbortController()
+
+    console.log("📡 Fetching positions for time:", time);  // ✅ ADD THIS
+    
     try{
-      const response = await fetch(`http://127.0.0.1:5000/api/race/live?elapsed=${time}`);
+      const response = await fetch(`http://127.0.0.1:5000/api/race/live?elapsed=${time}`,{signal:abortControllerRef.current.signal});
       const data = await response.json();
 
+      console.log("📡 Response received:", data.status, "Drivers:", data.drivers?.length);  // ✅ ADD THIS
+
       if (data.status === 'success' && data.drivers) {
-        setDrivers(data.drivers); //setting driver positions
+        console.log("✅ Setting drivers:", data.drivers.map(d => ({id: d.id, x: d.x, y: d.y})));  // ✅ ADD THIS
+        setDrivers(data.drivers);
         setSessionStatus({ currentLap: data.currentLap });
       }
     }catch(error){
-      console.error('Error fetching live positions:', error);
+      if (error.name !== 'AbortError') {
+        console.error('❌ Error fetching live positions:', error);
+      }
     }
   },[setDrivers, setSessionStatus]);
 
-
-// actually animating through animation frame
-
-  useEffect(() =>{
-    // it calculates elapsed time continously 
+  useEffect(() => {
+    console.log("🎬 Animation effect triggered. isPlaying:", isPlaying);  // ✅ ADD THIS
+    
     if(isPlaying){
-      const animate  = (timestamp) => {
+      const animate = (timestamp) => {
         if (!startTimeRef.current) {
           startTimeRef.current = timestamp;
-
+          console.log("⏱️ Animation started at timestamp:", timestamp);  // ✅ ADD THIS
         }
 
-        const elapsed  = (timestamp - startTimeRef.current) / 1000;
+        const elapsed = (timestamp - startTimeRef.current) / 1000;
+        const raceTime = elapsed * playbackSpeed;
 
-        const raceTime =  elapsed * playbackSpeed;
+        console.log("🔄 Animation frame - raceTime:", raceTime.toFixed(2));  // ✅ ADD THIS
 
         setElapsedTime(raceTime);
         fetchLivePositions(raceTime);
+        
         if(raceTime < 4680){
           animationRef.current = requestAnimationFrame(animate);
         }else{
           setIsPlaying(false);
-          console.log("Race has finished");
+          console.log("🏁 Race has finished");
         }
       };
       animationRef.current = requestAnimationFrame(animate);
-
     }
-    return () =>{
+    
+    return () => {
       if (animationRef.current) {
+        console.log("🛑 Cleaning up animation");  // ✅ ADD THIS
         cancelAnimationFrame(animationRef.current);
+      }
 
+      // cleaning pending requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, [isPlaying, playbackSpeed, fetchLivePositions]);
 
   const togglePlay = () => {
+    console.log("▶️ Toggle Play clicked. Current isPlaying:", isPlaying, "-> New:", !isPlaying);  // ✅ ADD THIS
+    
     if (!isPlaying) {
       startTimeRef.current = null;
+      // reset throttle when starting the play 
+      lastFetchTimeREf.current = 0;
     }
     setIsPlaying(!isPlaying);
   };
 
-// function to reset animation to start 
-
-  const resetAnimation = () =>{
+  const resetAnimation = () => {
+    console.log("⏮️ Reset clicked");  // ✅ ADD THIS
     setIsPlaying(false);
     setElapsedTime(0);
     startTimeRef.current = null;
+    // resets trottle timer
+    lastFetchTimeREf.current = 0;
+
+    // canceling any pending request 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }    
     fetchLivePositions(0);
 
   };
 
-  // function to change Speed of playback
-
-  const changeSpeed = (newSpeed) =>{
-
-    const wasPlaying  = isPlaying;
+  const changeSpeed = (newSpeed) => {
+    console.log("⚡ Speed changed to:", newSpeed);  // ✅ ADD THIS
+    
+    const wasPlaying = isPlaying;
     if (wasPlaying) {
       setIsPlaying(false);
-
     }
     setPlaybackSpeed(newSpeed);
     if (wasPlaying) {
-      setTimeout(() =>{
+      setTimeout(() => {
         startTimeRef.current = null;
+        // reset throttle timer
+        lastFetchTimeREf.current = 0;
         setIsPlaying(true);
-
-      },50)
+      }, 50);
     }
   };
-  // math to generate track map
+
   if (!trackMap || trackMap.svgPath === 0 ) {
     return <div style = {{ height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#666' }}>Loading Track Map...</div>
   }
-
-  // // finding the min max values
-  // const xValues = trackMap.map(p=> p.x);
-  // const yValues = trackMap.map(p=> p.y);
-
-  // const minX = Math.min(...xValues);
-  // const maxX = Math.max(...xValues);
-  // const minY = Math.min(...yValues);
-  // const maxY = Math.max(...yValues);
-
-  // const padding = 500;
-  // const width = (maxX - minX) + (padding * 2);
-  // const height = (maxY - minY) + (padding *2);   
-  // const viewBox = `${minX - padding} ${minY - padding} ${width} ${height}`;
-
-  // // creating Path to show on front end
-  // const pathData = trackMap.map((point, index) =>{
-  //   return `${index === 0 ? 'M':'L'} ${point.x} ${point.y}`;
-  // }).join(' ');
 
   const flagColorMap = {
     'RED':'red',
@@ -139,7 +164,6 @@ function TrackView() {
   }
   
   const currentFlagStatus = flagColorMap[flagStatus] || 'white';
-
   const isWarningActive = flagStatus !== 'GREEN'
 
   const statusTextMap = {
@@ -150,30 +174,28 @@ function TrackView() {
   }
 
   const indicatorText = statusTextMap[flagStatus] || `Status: ${flagStatus}`;
+  
   const trackStyle = {
     width: '100%',
-    height: '100%', //may need to change it later to 100vh
+    height: '100%',
     backgroundColor: '#000000',
     display: 'flex',
-    flexDirection: 'column', //change to row if it doesnt work and loosk bad
+    flexDirection: 'column',
     padding:'20px 30px',
     color: 'white',
     fontFamily:'sans-serif',
     overflow: 'hidden'
   };
 
-  const formatTime = (seconds) =>{
+  const formatTime = (seconds) => {
     const mins = Math.floor(seconds/60);
-    const secs = Math.floor(seconds %60);
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${String(secs).padStart(2, '0')}`;
-
   }
+
   return (
     <div style={trackStyle}>
-      {/* ========== NEW: Wrapped header in container with flexShrink ========== */}
-      <div style={{ flexShrink: 0 }}> {/* ← NEW: Prevents header from shrinking */}
-        
-        {/* ========== ORIGINAL: Main Title (no changes) ========== */}
+      <div style={{ flexShrink: 0 }}>
         <h1 style={{
           fontSize: '1.8em',
           margin: '0 0 10px 0',
@@ -181,23 +203,20 @@ function TrackView() {
         }}>
           Gridlytic
         </h1>
-        {/* ======================================================= */}
         
-        {/* ========== CHANGE: Modified status bar with new elements ========== */}
         <div style={{ 
-          padding: '5px 0 15px 0',  // ← CHANGE: Reduced bottom padding from 20px to 15px
+          padding: '5px 0 15px 0',
           fontSize: '0.9em', 
           display: 'flex', 
           alignItems: 'center',
-          gap: '15px',  // ← NEW: Added gap between elements
-          flexWrap: 'wrap'  // ← NEW: Allow wrapping on small screens
+          gap: '15px',
+          flexWrap: 'wrap'
         }}>
-          {/* Race status indicator (unchanged) */}
           {isWarningActive && (
             <span style={{ 
               backgroundColor: '#FFD700',
               color: '#000', 
-              padding: '4px 8px',  // ← CHANGE: Increased padding slightly
+              padding: '4px 8px',
               borderRadius: '3px', 
               fontWeight: 'bold'
             }}>
@@ -205,32 +224,26 @@ function TrackView() {
             </span>
           )}
 
-          {/* Lap count (unchanged) */}
           <span style={{ fontSize: '1.2em', fontWeight: 'bold' }}>
             Lap: {currentLap}/{totalLaps}
           </span>
 
-          {/* ========== NEW: Race time display ========== */}
           <span style={{ fontSize: '1em', color: '#888' }}>
             Race Time: {formatTime(elapsedTime)}
           </span>
-          {/* ============================================ */}
         </div>
-        {/* =================================================================== */}
 
-        {/* ========== NEW: Playback Controls Section ========== */}
         <div style={{ 
           display: 'flex', 
           gap: '10px', 
           marginBottom: '15px',
           alignItems: 'center'
         }}>
-          {/* ========== NEW: Play/Pause Button ========== */}
           <button 
             onClick={togglePlay}
             style={{
               padding: '8px 16px',
-              backgroundColor: isPlaying ? '#ff4444' : '#44ff44', // Red when playing, green when paused
+              backgroundColor: isPlaying ? '#ff4444' : '#44ff44',
               border: 'none',
               borderRadius: '4px',
               color: '#000',
@@ -244,9 +257,7 @@ function TrackView() {
           >
             {isPlaying ? '⏸ Pause' : '▶ Play'}
           </button>
-          {/* =========================================== */}
           
-          {/* ========== NEW: Reset Button ========== */}
           <button 
             onClick={resetAnimation}
             style={{
@@ -265,9 +276,7 @@ function TrackView() {
           >
             ⏮ Reset
           </button>
-          {/* ======================================= */}
 
-          {/* ========== NEW: Speed Control Buttons ========== */}
           <div style={{ 
             display: 'flex', 
             alignItems: 'center', 
@@ -281,7 +290,7 @@ function TrackView() {
                 onClick={() => changeSpeed(speed)}
                 style={{
                   padding: '6px 10px',
-                  backgroundColor: playbackSpeed === speed ? '#666' : '#222', // Highlight current speed
+                  backgroundColor: playbackSpeed === speed ? '#666' : '#222',
                   border: playbackSpeed === speed ? '1px solid #888' : '1px solid #444',
                   borderRadius: '3px',
                   color: playbackSpeed === speed ? '#fff' : '#aaa',
@@ -294,33 +303,27 @@ function TrackView() {
               </button>
             ))}
           </div>
-          {/* =============================================== */}
         </div>
-        {/* =================================================== */}
       </div>
-      {/* ===================================================================== */}
 
-      {/* ========== CHANGE: Modified track container for better layout ========== */}
       <div style={{
-        flex: 1,  // ← ORIGINAL: Take remaining space
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
         alignItems: 'center',
-        minHeight: 0,  // ← NEW: Prevent flex item from exceeding container
-        padding: '10px 0'  // ← CHANGE: Reduced from 20px to 10px
+        minHeight: 0,
+        padding: '10px 0'
       }}>
-        {/* ========== CHANGE: Modified SVG styling ========== */}
         <svg
           viewBox={trackMap.viewBox}
           style={{ 
-            width: '100%',  // ← CHANGE: Changed from 'auto' to '100%'
-            height: '100%',  // ← CHANGE: Changed from '95%' to '100%'
-            maxHeight: '100%'  // ← NEW: Prevent overflow
+            width: '100%',
+            height: '100%',
+            maxHeight: '100%'
           }}
           preserveAspectRatio="xMidYMid meet"
         >
-          {/* ========== ORIGINAL: Track outline path (no changes) ========== */}
           <path
             d={trackMap.svgPath}
             fill="none"
@@ -330,21 +333,19 @@ function TrackView() {
             strokeLinecap="round"
             style={{ transition: 'stroke 0.5s ease' }}
           />
-          {/* =============================================================== */}
           
-          {/* ========== CHANGE: Modified driver dots with animation support ========== */}
           {drivers.map((driver) => (
             <g key={driver.id}>
               <circle
-                cx={driver.x}  // ← These update via Zustand when fetchLivePositions runs
+                cx={driver.x}
                 cy={driver.y}
                 r="12"
                 fill={driver.teamcolor}
                 stroke="white"
                 strokeWidth="2"
                 style={{ 
-                  transition: 'cx 0.3s linear, cy 0.3s linear',  // ← NEW: Smooth position transitions
-                  cursor: 'pointer'  // ← NEW: Show it's interactive
+                  transition: 'cx 0.3s linear, cy 0.3s linear',
+                  cursor: 'pointer'
                 }}
               />
               
@@ -352,23 +353,21 @@ function TrackView() {
                 x={driver.x}
                 y={driver.y - 18}
                 fill="white"
-                fontSize="13"  // ← CHANGE: Reduced from 14 to 13
+                fontSize="13"
                 fontWeight="bold"
                 textAnchor="middle"
                 style={{ 
-                  transition: 'x 0.3s linear, y 0.3s linear',  // ← NEW: Smooth text transitions
+                  transition: 'x 0.3s linear, y 0.3s linear',
                   pointerEvents: 'none',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'  // ← NEW: Added shadow for readability
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
                 }}
               >
                 {driver.driverName}
               </text>
             </g>
           ))}
-          {/* ========================================================================= */}
         </svg>
       </div>
-      {/* ======================================================================= */}
     </div>
   );
 }

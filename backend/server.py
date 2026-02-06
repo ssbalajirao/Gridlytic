@@ -3,6 +3,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import traceback
 import pandas as pd
+import threading
 
 # Initialize the Flask App
 app = Flask(__name__)
@@ -19,7 +20,7 @@ cached_session = None
 cached_bounds = None
 cached_driver_metadata = None
 cached_race_start_time = None
-
+session_lock = threading.Lock()
 
 def get_track_shape_once():
     global cached_track_map
@@ -45,8 +46,15 @@ def get_track_shape_once():
         path_parts = []
 
         for i, row in enumerate(telemetry.itertuples()):
-            norm_x = ((row.X - x_min) / (x_max - x_min)) * 1000
-            norm_y = 1000 - (((row.Y - y_min)/(y_max - y_min)) * 1000)
+            x_range = x_max - x_min
+            y_range = y_max - y_min
+            if x_range == 0 or y_range == 0:
+                # Use default normalization or skip
+                return cached_track_map
+
+            # Then use these ranges in your calculations
+            norm_x = ((row.X - x_min) / x_range) * 1000
+            norm_y = 1000 - (((row.Y - y_min) / y_range) * 1000)
 
             # Path building
             command = "M" if i == 0 else "L"
@@ -70,28 +78,29 @@ def get_track_shape_once():
 
 def initialize_session():
     global cached_session, cached_bounds, cached_driver_metadata
-    if cached_session is None:
-        print("initializing session data......")
-        cached_session = fastf1.get_session(2025, 'Silverstone', 'R')
-        cached_session.load(telemetry=True, weather=False)
+    with session_lock:
+        if cached_session is None:
+            print("initializing session data......")
+            cached_session = fastf1.get_session(2025, 'Silverstone', 'R')
+            cached_session.load(telemetry=True, weather=False)
 
-        global cached_race_start_time
-        if cached_race_start_time is None:
-            cached_race_start_time = cached_session.laps['LapStartTime'].min()
+            global cached_race_start_time
+            if cached_race_start_time is None:
+                cached_race_start_time = cached_session.laps['LapStartTime'].min()
 
 
 
-        # getting bounds
-        track_info = get_track_shape_once()
-        cached_bounds = track_info['bounds']
+            # getting bounds
+            track_info = get_track_shape_once()
+            cached_bounds = track_info['bounds']
 
-        cached_driver_metadata = {}
-        for _, res in cached_session.results.iterrows():
-            cached_driver_metadata[str(res['DriverNumber'])] = {
-                "color": f"#{res['TeamColor']}" if not pd.isna(res['TeamColor']) else "#FFFFFF",
-                "name": res['FullName']
-            }
-        print("Session initialized successfully!")
+            cached_driver_metadata = {}
+            for _, res in cached_session.results.iterrows():
+                cached_driver_metadata[str(res['DriverNumber'])] = {
+                    "color": f"#{res['TeamColor']}" if not pd.isna(res['TeamColor']) else "#FFFFFF",
+                    "name": res['FullName']
+                }
+            print("Session initialized successfully!")
     return cached_session, cached_bounds, cached_driver_metadata
 
 # function to get driver position at a pertivular time 
@@ -208,12 +217,13 @@ def get_f1_data():
 def get_live_positions():
     try:
         elapsed_time = float(request.args.get('elapsed', 0))
+        print(f"/api/race/live called with elapsed={elapsed_time}")
 
         session, bounds, driver_metadata = initialize_session()
 
 
-        avg_lap_time = 90
-        current_lap = min(int(elapsed_time / avg_lap_time) + 1, 52)  # Silverstone has ~52 laps
+        # avg_lap_time = 90
+        # current_lap = min(int(elapsed_time / avg_lap_time) + 1, 52)  # Silverstone has ~52 laps
 
         # fetching all the drivers from the session 
         drivers_List = []
@@ -245,12 +255,12 @@ def get_live_positions():
 
                     # getting tyre compound of the current lap 
                     current_lap_data = driver_laps[driver_laps['LapNumber'] == current_driver_lap]
-                    tire_compound = 'UNKOWN'
+                    tire_compound = 'UNKNOWN'
                     if len(current_lap_data) > 0:
                         tire_compound = str(current_lap_data.iloc[0].get('Compound','UNKNOWN'))
-                except:
+                except Exception as e:
                     tire_compound = 'UNKNOWN'
-                    current_driver_lap = current_lap
+                    current_driver_lap = 1
                 
                 # Driver data object
 
@@ -262,15 +272,36 @@ def get_live_positions():
                     "x": position_data['x'],  # ← Normalized coordinates for SVG
                     "y": position_data['y'],
                     "speed": position_data.get('speed', 0),
+                    "time_delta": position_data.get('time_delta', float('inf')),
                     "currentLap": current_driver_lap
                 })
         
-        drivers_List.sort(key=lambda d: d.get('speed', 0), reverse=True)
-
+        drivers_List.sort(key=lambda d: d.get('time_delta', 0), reverse=True)
+        leader_time = drivers_List[0].get('time_delta', 0) if drivers_List else 0
         for idx, driver in enumerate(drivers_List):
             driver['position'] = idx + 1
-            driver['gapToLeader'] = f"+{idx * 0.5:.1f}s" if idx > 0 else "LAP"
+
+            if idx == 0:
+                driver['gapToLeader'] = "LAP"  
+            else:
+                gap_seconds = driver.get('time_delta', 0) - leader_time
+                if gap_seconds <60:
+                    driver['gapToLeader'] = f"+{gap_seconds:.1f}s"
+                else:
+                    minutes = int(gap_seconds // 60)
+                    seconds = gap_seconds % 60
+                    driver['gapToLeader'] = f"+{minutes}:{seconds:05.2f}"
+
+            # driver['gapToLeader'] = f"+{idx * 0.5:.1f}s" if idx > 0 else "LAP"
         
+        current_lap =1
+        if drivers_List:
+            current_lap = drivers_List[0].get('currentLap',1)
+        
+        print(f"   ✅ Returning {len(drivers_List)} drivers")
+        if drivers_List:
+            print(f"   🏁 Leader: {drivers_List[0]['driverName']} - Lap {drivers_List[0]['currentLap']}, Position: x={drivers_List[0]['x']:.1f}, y={drivers_List[0]['y']:.1f}")
+
         return jsonify({
             "status": "success",
             "currentLap": current_lap,
