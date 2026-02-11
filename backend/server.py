@@ -20,6 +20,8 @@ cached_session = None
 cached_bounds = None
 cached_driver_metadata = None
 cached_race_start_time = None
+cached_telemetry_ranges = {}
+cached_driver_telemetry = {}
 session_lock = threading.Lock()
 
 def get_track_shape_once():
@@ -73,7 +75,7 @@ def get_track_shape_once():
         print("Geometry engine is ready")
 
     
-    return cached_track_map  # Fixed: return the map instead of calling function again
+    return cached_track_map  
 
 
 def initialize_session():
@@ -87,6 +89,7 @@ def initialize_session():
             global cached_race_start_time
             if cached_race_start_time is None:
                 cached_race_start_time = cached_session.laps['LapStartTime'].min()
+                print(f"Race start time: {cached_race_start_time}")
 
 
 
@@ -103,62 +106,98 @@ def initialize_session():
             print("Session initialized successfully!")
     return cached_session, cached_bounds, cached_driver_metadata
 
-# function to get driver position at a pertivular time 
-
-
-def get_driver_position_at_time(driver_number, target_time):
-    session, bounds, driver_metadata = initialize_session()
-
+# function to get driver position at a particular time 
+def get_driver_position_at_time(driver_number, target_time, session, bounds):
+    global cached_telemetry_ranges, cached_driver_telemetry
+    
     try:
         driver_laps = session.laps.pick_drivers(driver_number)
 
         if len(driver_laps) == 0:
             return None
         
+        # Check if we already have telemetry for this driver
+        if driver_number in cached_driver_telemetry:
+            driver_telemetry = cached_driver_telemetry[driver_number]
+            if target_time < 5:
+                print(f"    📊 Using cached telemetry for driver {driver_number}: {len(driver_telemetry)} points")
+        else:
+            # Try to get all telemetry at once (bulk method)
+            try:
+                driver_telemetry = driver_laps.get_telemetry()
+                if target_time < 5:
+                    print(f"    📊 Got telemetry for driver {driver_number}: {len(driver_telemetry)} points (bulk)")
+            except Exception as tel_error:
+                # Fallback to lap-by-lap if bulk fails
+                if target_time < 5:
+                    print(f"    ⚠️ Failed to get telemetry in bulk for driver {driver_number}, trying lap by lap")
+                
+                all_telemetry = []
+                for _, lap in driver_laps.iterrows():
+                    try:
+                        lap_tel = lap.get_telemetry()
+                        if len(lap_tel) > 0:
+                            all_telemetry.append(lap_tel)
+                    except Exception as lap_error:
+                        continue
 
-        telemetry  = driver_laps.get_telemetry()
+                if not all_telemetry:
+                    if target_time < 5:
+                        print(f"    ❌ No telemetry data for driver {driver_number}")
+                    return None
+                
+                driver_telemetry = pd.concat(all_telemetry, ignore_index=True)
+                if target_time < 5:
+                    print(f"    📊 Got telemetry lap-by-lap for driver {driver_number}: {len(driver_telemetry)} points")
+            
+            # Cache the telemetry after fetching
+            cached_driver_telemetry[driver_number] = driver_telemetry
 
-        if len(telemetry) == 0:
+        if len(driver_telemetry) == 0:
             return None
-    # Calculate time delta from race start
-
-        telemetry = telemetry.copy()
-        telemetry['TimeDelta'] = (
-            telemetry['Time'] - cached_race_start_time
+        
+        # Calculate time delta from race start
+        driver_telemetry = driver_telemetry.copy()
+        driver_telemetry['TimeDelta'] = (
+            driver_telemetry['Time'] - cached_race_start_time
         ).dt.total_seconds()
 
-    # Find the telemetry point closest to our target time
-        closest_idx = (telemetry['TimeDelta'] - target_time).abs().idxmin()
-        point = telemetry.loc[closest_idx]
+        # Cache the telemetry range for this driver
+        if driver_number not in cached_telemetry_ranges:
+            min_time = driver_telemetry['TimeDelta'].min()
+            max_time = driver_telemetry['TimeDelta'].max()
+            cached_telemetry_ranges[driver_number] = (min_time, max_time)
+            print(f"📊 Driver {driver_number}: Telemetry from {min_time:.1f}s to {max_time:.1f}s")
 
-    # Normalize coordinates to 1000x1000 grid (same as track outline)
-        dot_x = ((point['X'] - bounds['x_min']) / (bounds['x_max'] - bounds['x_min'])) * 1000
-        dot_y = 1000 - (((point['Y'] - bounds['y_min']) / (bounds['y_max'] - bounds['y_min'])) * 1000)
+        # Find the telemetry point closest to our target time
+        closest_idx = (driver_telemetry['TimeDelta'] - target_time).abs().idxmin()
+        point = driver_telemetry.loc[closest_idx]
+
+        # Normalize coordinates to 1000x1000 grid
+        x_range = bounds['x_max'] - bounds['x_min']
+        y_range = bounds['y_max'] - bounds['y_min']
+        
+        if x_range == 0 or y_range == 0:
+            return None
+            
+        dot_x = ((point['X'] - bounds['x_min']) / x_range) * 1000
+        dot_y = 1000 - (((point['Y'] - bounds['y_min']) / y_range) * 1000)
 
         return {
-            "x":round(dot_x, 1),
-            "y":round(dot_y, 1),
+            "x": round(dot_x, 1),
+            "y": round(dot_y, 1),
             "speed": round(point['Speed'], 1) if 'Speed' in point else 0,
-            "time_delta":float(point['TimeDelta'])
+            "time_delta": float(point['TimeDelta'])
         }
     except Exception as e:
-        print(f"Error getting position for driver {driver_number} at time {target_time}: {e}")
+        if driver_number not in cached_telemetry_ranges:
+            print(f"❌ Error for driver {driver_number}: {e}")
         return None
-
-
 
 # creating a function to get race data
 def get_f1_data():
-
     # getting cached data from the other two functions
-
     session, bounds, driver_metadata = initialize_session()
-
-    
-
-
-
-    # result = session.results
 
     target_lap = 1
     race_laps = session.laps[session.laps['LapNumber'] == target_lap]
@@ -217,31 +256,34 @@ def get_f1_data():
 def get_live_positions():
     try:
         elapsed_time = float(request.args.get('elapsed', 0))
-        print(f"/api/race/live called with elapsed={elapsed_time}")
+        if elapsed_time < 5:
+            print(f"\n📡 /api/race/live @ {elapsed_time:.2f}s")
 
         session, bounds, driver_metadata = initialize_session()
-
-
-        # avg_lap_time = 90
-        # current_lap = min(int(elapsed_time / avg_lap_time) + 1, 52)  # Silverstone has ~52 laps
 
         # fetching all the drivers from the session 
         drivers_List = []
         all_drivers = session.results['DriverNumber'].unique()
+        print(f"Processing {len(all_drivers)} drivers: {list(all_drivers)}")
 
-        # looping thriugh each driver position at a given time
-
+        # looping through each driver position at a given time
         for driver_num in all_drivers:
             driver_number = str(driver_num)
 
-            position_data = get_driver_position_at_time(driver_number, elapsed_time)
+            if elapsed_time < 5:
+                print(f"🔍 Processing driver {driver_number}...")
+
+            position_data = get_driver_position_at_time(driver_number, elapsed_time, session, bounds)
+            if position_data and elapsed_time < 5:
+                print(f"   ✅ Driver {driver_number}: Got position data")
+            elif elapsed_time < 5:
+                print(f"   ❌ Driver {driver_number}: No position data (returned None)")
 
             if position_data:
                 team_color = driver_metadata.get(driver_number, {}).get("color", "#FFFFFF")
                 full_name = driver_metadata.get(driver_number, {}).get("name", f"Driver {driver_number}")
 
                 # trying to get current lap info and tire compound
-
                 try:
                     driver_laps = session.laps.pick_drivers(driver_number)
                     current_driver_lap = 1
@@ -263,7 +305,6 @@ def get_live_positions():
                     current_driver_lap = 1
                 
                 # Driver data object
-
                 drivers_List.append({
                     "id": driver_number,
                     "driverName": full_name,
@@ -276,31 +317,32 @@ def get_live_positions():
                     "currentLap": current_driver_lap
                 })
         
-        drivers_List.sort(key=lambda d: d.get('time_delta', 0), reverse=True)
-        leader_time = drivers_List[0].get('time_delta', 0) if drivers_List else 0
-        for idx, driver in enumerate(drivers_List):
-            driver['position'] = idx + 1
+        if drivers_List:
+            drivers_List.sort(key=lambda d: d.get('time_delta', 0))
+            leader_time = drivers_List[0].get('time_delta', 0) if drivers_List else 0
+            for idx, driver in enumerate(drivers_List):
+                driver['position'] = idx + 1
 
-            if idx == 0:
-                driver['gapToLeader'] = "LAP"  
-            else:
-                gap_seconds = driver.get('time_delta', 0) - leader_time
-                if gap_seconds <60:
-                    driver['gapToLeader'] = f"+{gap_seconds:.1f}s"
+                if idx == 0:
+                    driver['gapToLeader'] = "LAP"  
                 else:
-                    minutes = int(gap_seconds // 60)
-                    seconds = gap_seconds % 60
-                    driver['gapToLeader'] = f"+{minutes}:{seconds:05.2f}"
-
-            # driver['gapToLeader'] = f"+{idx * 0.5:.1f}s" if idx > 0 else "LAP"
+                    gap_seconds = driver.get('time_delta', 0) - leader_time
+                    if gap_seconds <60:
+                        driver['gapToLeader'] = f"+{gap_seconds:.1f}s"
+                    else:
+                        minutes = int(gap_seconds // 60)
+                        seconds = gap_seconds % 60
+                        driver['gapToLeader'] = f"+{minutes}:{seconds:05.2f}"
+        else:
+            print("⚠️ No drivers have position data!")
         
         current_lap =1
         if drivers_List:
             current_lap = drivers_List[0].get('currentLap',1)
         
-        print(f"   ✅ Returning {len(drivers_List)} drivers")
-        if drivers_List:
-            print(f"   🏁 Leader: {drivers_List[0]['driverName']} - Lap {drivers_List[0]['currentLap']}, Position: x={drivers_List[0]['x']:.1f}, y={drivers_List[0]['y']:.1f}")
+            print(f"✅ Returning {len(drivers_List)} drivers out of {len(all_drivers)} total")
+            if drivers_List and elapsed_time < 5:
+                print(f"   🏁 Leader: {drivers_List[0]['driverName']} - Lap {drivers_List[0]['currentLap']}, Position: x={drivers_List[0]['x']:.1f}, y={drivers_List[0]['y']:.1f}")
 
         return jsonify({
             "status": "success",
@@ -312,10 +354,6 @@ def get_live_positions():
         print("ERROR in live endpoint:")
         print(traceback.format_exc())
         return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
-
 
 
 # =======================================================================================================#
