@@ -17,6 +17,7 @@ function TrackView() {
 
   const animationRef = useRef(null);  
   const startTimeRef = useRef(null); 
+  const elapsedAtPauseRef = useRef(0);  
 
   // adding throttling in order to tackle memory leak
   // old method was sending 60 https request per second which caused memory leak  now we are make it 10 per second and also handling mempry leak 
@@ -76,7 +77,7 @@ function TrackView() {
         }
 
         const elapsed = (timestamp - startTimeRef.current) / 1000;
-        const raceTime = elapsed * playbackSpeed;
+        const raceTime = elapsedAtPauseRef.current + (elapsed * playbackSpeed);
 
         console.log("🔄 Animation frame - raceTime:", raceTime.toFixed(2));  // ✅ ADD THIS
 
@@ -109,10 +110,12 @@ function TrackView() {
   const togglePlay = () => {
     console.log("▶️ Toggle Play clicked. Current isPlaying:", isPlaying, "-> New:", !isPlaying);  // ✅ ADD THIS
     
-    if (!isPlaying) {
-      startTimeRef.current = null;
-      // reset throttle when starting the play 
-      lastFetchTimeREf.current = 0;
+    if (isPlaying) {
+      // Save current race time when pausing
+      elapsedAtPauseRef.current = elapsedTime;
+    } else {
+
+      startTimeRef.current = null; // Will be recalculated with offset
     }
     setIsPlaying(!isPlaying);
   };
@@ -123,7 +126,7 @@ function TrackView() {
     setElapsedTime(0);
     startTimeRef.current = null;
     // resets trottle timer
-    lastFetchTimeREf.current = 0;
+    elapsedAtPauseRef.current = 0;
 
     // canceling any pending request 
     if (abortControllerRef.current) {
@@ -336,31 +339,25 @@ function TrackView() {
           
           {drivers.map((driver) => (
             <g key={driver.id}>
-              <circle
-                cx={driver.x}
-                cy={driver.y}
-                r="12"
-                fill={driver.teamcolor}
-                stroke="white"
-                strokeWidth="2"
-                style={{ 
-                  transition: 'cx 0.3s linear, cy 0.3s linear',
-                  cursor: 'pointer'
-                }}
-              />
+            <circle
+              cx={0}
+              cy={0}
+              r="12"
+              fill={driver.teamcolor}
+              stroke="white"
+              strokeWidth="2"
+              style={{ transform: `translate(${driver.x}px, ${driver.y}px)`, transition: 'transform 0.1s linear' }}
+            />
               
               <text
-                x={driver.x}
-                y={driver.y - 18}
+                x={0}
+                y={ -18}
                 fill="white"
                 fontSize="13"
                 fontWeight="bold"
                 textAnchor="middle"
-                style={{ 
-                  transition: 'x 0.3s linear, y 0.3s linear',
-                  pointerEvents: 'none',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.8)'
-                }}
+                style={{ transform: `translate(${driver.x}px, ${driver.y}px)`, transition: 'transform 0.1s linear' }}
+
               >
                 {driver.driverName}
               </text>
